@@ -9,16 +9,30 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from fastmcp import FastMCP
 from fastmcp.server.auth import AccessToken, TokenVerifier
+from pydantic import Field
 from starlette.responses import JSONResponse
 
 HOLIDAY_URL = "https://www.gov.uk/bank-holidays.json"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+RUNTIME_PLACEHOLDER_RE = re.compile(r"^\$\{[A-Za-z_][A-Za-z0-9_]*\}$")
+
+
+def _runtime_env(*names: str, default: str = "") -> str:
+    for name in names:
+        value = os.getenv(name)
+        if value is None:
+            continue
+        cleaned = value.strip()
+        if not cleaned or RUNTIME_PLACEHOLDER_RE.fullmatch(cleaned):
+            continue
+        return cleaned
+    return default
 
 
 def _now_utc() -> datetime:
@@ -52,7 +66,7 @@ def _parse_optional_datetime(value: str | None, label: str) -> datetime | None:
 
 def _resolve_database_path() -> str:
     default = "sqlite:///data/mcp.db"
-    raw = (os.getenv("DATABASE_URL") or default).strip()
+    raw = _runtime_env("DATABASE_URL", default=default)
     if raw in {":memory:", "sqlite::memory:", "file::memory:"}:
         return ":memory:"
 
@@ -375,7 +389,7 @@ class HolidayService:
             if fetched_at > _now_utc() - timedelta(days=1):
                 return json.loads(cached["payload"])
 
-        timeout_ms = int(os.getenv("HOLIDAY_FETCH_TIMEOUT_MS", "5000") or "5000")
+        timeout_ms = int(_runtime_env("HOLIDAY_FETCH_TIMEOUT_MS", default="5000") or "5000")
         timeout_s = max(timeout_ms, 1) / 1000
 
         try:
@@ -438,7 +452,7 @@ class StatusResolver:
         if latest_location_event:
             created = datetime.fromtimestamp(latest_location_event["created_at"] / 1000, tz=timezone.utc)
             expires_at = latest_location_event["expires_at"]
-            stale_hours = float(os.getenv("LOCATION_STALE_HOURS", "6") or "6")
+            stale_hours = float(_runtime_env("LOCATION_STALE_HOURS", default="6") or "6")
             stale_window = timedelta(hours=stale_hours if stale_hours > 0 else 6)
 
             expired = bool(expires_at and expires_at < int(now.timestamp() * 1000))
@@ -470,11 +484,11 @@ class StatusResolver:
 
 def _load_api_keys() -> list[str]:
     keys: list[str] = []
-    single = os.getenv("MCP_API_KEY")
+    single = _runtime_env("MCP_API_KEY")
     if single:
         keys.append(single.strip())
 
-    multi = os.getenv("MCP_API_KEYS")
+    multi = _runtime_env("MCP_API_KEYS")
     if multi:
         for raw in multi.split(","):
             token = raw.strip()
@@ -490,9 +504,10 @@ holidays = HolidayService(store)
 resolver = StatusResolver(store, holidays)
 
 api_keys = _load_api_keys()
-auth = StaticApiKeyVerifier(api_keys, base_url=os.getenv("BASE_URL")) if api_keys else None
+auth = StaticApiKeyVerifier(api_keys, base_url=_runtime_env("BASE_URL")) if api_keys else None
 
 server = FastMCP("personal-context-fast-mcp", auth=auth)
+mcp = server
 
 
 @server.custom_route("/", methods=["GET", "HEAD"], include_in_schema=False)
@@ -573,7 +588,7 @@ def status_set_location(
 
 @server.tool
 def status_get_location_history(
-    from_: str | None = None,
+    from_: Annotated[str | None, Field(alias="from")] = None,
     to: str | None = None,
     limit: int | None = None,
 ) -> dict[str, Any]:
@@ -611,7 +626,10 @@ def status_schedule_set(
 
 
 @server.tool
-def status_schedule_list(from_: str | None = None, to: str | None = None) -> list[dict[str, Any]]:
+def status_schedule_list(
+    from_: Annotated[str | None, Field(alias="from")] = None,
+    to: str | None = None,
+) -> list[dict[str, Any]]:
     return store.list_schedules(from_, to)
 
 
@@ -627,13 +645,13 @@ def holidays_list(region: str | None = None) -> list[dict[str, Any]]:
 
 
 def main() -> None:
-    transport_name = os.getenv("FASTMCP_TRANSPORT", "streamable-http").strip().lower()
+    transport_name = _runtime_env("FASTMCP_TRANSPORT", default="streamable-http").lower()
 
     if transport_name == "stdio":
         server.run()
     else:
-        host = os.getenv("HOST", "0.0.0.0")
-        port = int(os.getenv("PORT", "8000"))
+        host = _runtime_env("HOST", default="0.0.0.0")
+        port = int(_runtime_env("PORT", default="8000"))
         server.run(transport=transport_name, host=host, port=port)
 
 

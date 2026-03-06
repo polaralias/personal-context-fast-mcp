@@ -1,6 +1,6 @@
 # personal-context-fast-mcp
 
-FastMCP Python server for Personal Context.
+Contained FastMCP Python server for Personal Context.
 
 ## What is migrated
 
@@ -20,23 +20,38 @@ FastMCP Python server for Personal Context.
 - Holiday cache behavior
 - No UI/OAuth pages
 
-## Configuration
+## Project configuration (`fastmcp.json`)
 
-- `DATABASE_URL` (default: `sqlite:///data/mcp.db`)
-- `LOCATION_STALE_HOURS` (default: `6`)
-- `HOLIDAY_FETCH_TIMEOUT_MS` (default: `5000`)
+This repository now includes a canonical `fastmcp.json` aligned with FastMCP project configuration docs:
 
-Optional HTTP bearer auth:
+- `source`: `server.py:mcp`
+- `environment`: uv-managed Python environment from local `pyproject.toml`
+- `deployment`: HTTP runtime defaults (`/mcp`) plus runtime env wiring
 
-- `MCP_API_KEY` (single key), or
-- `MCP_API_KEYS` (comma-separated)
+FastMCP CLI arguments still override config values when needed.
 
-## Run
+## Runtime env
+
+- Core settings:
+  - `DATABASE_URL` (default: `sqlite:///data/mcp.db`)
+  - `LOCATION_STALE_HOURS` (default: `6`)
+  - `HOLIDAY_FETCH_TIMEOUT_MS` (default: `5000`)
+
+- Optional HTTP bearer auth:
+  - `MCP_API_KEY` (single key), or
+  - `MCP_API_KEYS` (comma-separated)
+  - `BASE_URL` (if needed for token verifier metadata)
+
+## Validate and run
 
 ```bash
-# HTTP (default)
-python server.py
+# Validate tool discovery / entrypoint
+fastmcp inspect fastmcp.json
+fastmcp inspect server.py:mcp
 
-# stdio
-FASTMCP_TRANSPORT=stdio python server.py
+# Run from project config
+fastmcp run
+
+# Override transport at runtime
+fastmcp run --transport stdio
 ```
