@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 
 from fastmcp import FastMCP
 from fastmcp.server.auth import AccessToken, TokenVerifier
+from starlette.responses import JSONResponse
 
 HOLIDAY_URL = "https://www.gov.uk/bank-holidays.json"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -492,6 +493,21 @@ api_keys = _load_api_keys()
 auth = StaticApiKeyVerifier(api_keys, base_url=os.getenv("BASE_URL")) if api_keys else None
 
 server = FastMCP("personal-context-fast-mcp", auth=auth)
+
+
+@server.custom_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+async def root_health(_request):
+    return JSONResponse({"status": "ok", "server": "personal-context-fast-mcp"})
+
+
+@server.custom_route("/health", methods=["GET", "HEAD"], include_in_schema=False)
+async def health(_request):
+    return JSONResponse({"status": "ok", "server": "personal-context-fast-mcp"})
+
+
+@server.custom_route("/healthz", methods=["GET", "HEAD"], include_in_schema=False)
+async def healthz(_request):
+    return JSONResponse({"status": "ok", "server": "personal-context-fast-mcp"})
 
 
 @server.tool
