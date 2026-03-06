@@ -1,0 +1,16 @@
+[project]
+name = "personal-context-fast-mcp"
+version = "0.1.0"
+description = "FastMCP Python proxy for personal-context-mcp"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastmcp>=3.1.0"
+]
+
+[project.scripts]
+personal-context-fast-mcp = "server:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
